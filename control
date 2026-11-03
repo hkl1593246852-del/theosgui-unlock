@@ -1,0 +1,9 @@
+Package: com.filzalite.theosguiunlock
+Name: TheosGUI Unlock
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: Forces TheosGUI sponsorship activation state on an owned device
+Maintainer: local
+Author: local
+Section: Tweaks
+Depends: mobilesubstrate
