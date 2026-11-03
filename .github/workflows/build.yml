@@ -10,37 +10,24 @@ jobs:
       - name: Toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y make git curl xz-utils clang lld llvm
-          which ld64.lld ld.lld llvm-lipo llvm-objcopy || true
-      - name: Theos
+          sudo apt-get install -y clang lld llvm git curl
+      - name: SDK
         run: |
-          git clone --recursive https://github.com/theos/theos.git $HOME/theos
           git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
-          mkdir -p $HOME/theos/sdks && cp -r /tmp/sdks/iPhoneOS*.sdk $HOME/theos/sdks/
-          B=$HOME/theos/toolchain/linux/iphone/bin
-          mkdir -p $B
-          ln -sf $(which clang) $B/clang
-          ln -sf $(which clang++) $B/clang++
-          ln -sf $(which ld64.lld) $B/ld
-          ln -sf $(which ld64.lld) $B/ld64.lld
-          ln -sf /usr/bin/llvm-lipo $B/lipo || true
-          ln -sf /usr/bin/llvm-objcopy $B/objcopy || true
-          ln -sf /usr/bin/llvm-strip $B/strip || true
-          ln -sf /usr/bin/llvm-ar $B/ar || true
-          ln -sf /usr/bin/llvm-ranlib $B/ranlib || true
-          ls -la $B
-          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+          ls /tmp/sdks | head
       - name: Build
         run: |
-          export PATH=$HOME/theos/toolchain/linux/iphone/bin:$THEOS/bin:$PATH
-          make
-      - name: Collect
-        run: |
-          mkdir -p out
-          find .theos -type f -name '*.dylib' -exec cp -v {} out/ \;
-          ls -la out || true
+          SDK=$(ls -d /tmp/sdks/iPhoneOS*.sdk | sort -V | tail -1)
+          echo "SDK=$SDK"
+          clang -target arm64-apple-ios14.0 -isysroot "$SDK" \
+            -fobjc-arc -O2 -dynamiclib -fuse-ld=lld \
+            -undefined dynamic_lookup \
+            -framework Foundation -framework UIKit \
+            -install_name @executable_path/TheosGUIUnlock.dylib \
+            -o TheosGUIUnlock.dylib Tweak.m
+          file TheosGUIUnlock.dylib || true
+          ls -la TheosGUIUnlock.dylib
       - uses: actions/upload-artifact@v4
         with:
           name: theosgui-unlock
-          path: out/
-          if-no-files-found: warn
+          path: TheosGUIUnlock.dylib
