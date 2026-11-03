@@ -1,14 +1,26 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 #import <dlfcn.h>
 
+@interface SponsorshipViewController : UIViewController
+@end
+
+static NSString *notifName(void) {
+    void *sym = dlsym(RTLD_DEFAULT, "kDeviceActivatedNotification");
+    if (sym) {
+        NSString *__unsafe_unretained *p = (NSString *__unsafe_unretained *)sym;
+        if (*p) return *p;
+    }
+    return @"kDeviceActivatedNotification";
+}
+
 static void postActivated(NSString *why) {
-    NSString **sym = (NSString **)dlsym(RTLD_DEFAULT, "kDeviceActivatedNotification");
-    NSString *name = (sym && *sym) ? *sym : @"kDeviceActivatedNotification";
+    NSString *name = notifName();
     dispatch_async(dispatch_get_main_queue(), ^{
         [[NSNotificationCenter defaultCenter] postNotificationName:name object:nil];
-        NSLog(@"[TGU] posted activation notification (%@)", why);
+        NSLog(@"[TGU] posted %@ (%@)", name, why);
     });
 }
 
@@ -18,14 +30,12 @@ static void postActivated(NSString *why) {
 - (void)viewDidAppear:(BOOL)a {
     %orig;
     postActivated(@"viewDidAppear");
-    if ([self respondsToSelector:NSSelectorFromString(@"handleDeviceActivated")]) {
-        [(id)self performSelector:NSSelectorFromString(@"handleDeviceActivated")];
-        NSLog(@"[TGU] invoked handleDeviceActivated");
+    SEL sel = NSSelectorFromString(@"handleDeviceActivated");
+    if ([self respondsToSelector:sel]) {
+        ((void (*)(id, SEL))objc_msgSend)(self, sel);
+        NSLog(@"[TGU] called handleDeviceActivated");
     }
 }
 %end
 
-%ctor {
-    NSLog(@"[TGU] tweak loaded");
-    postActivated(@"ctor");
-}
+%ctor { NSLog(@"[TGU] loaded"); postActivated(@"ctor"); }
