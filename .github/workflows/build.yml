@@ -11,18 +11,28 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y make git curl xz-utils clang lld llvm
+          which ld64.lld ld.lld llvm-lipo llvm-objcopy || true
       - name: Theos
         run: |
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
           git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
           mkdir -p $HOME/theos/sdks && cp -r /tmp/sdks/iPhoneOS*.sdk $HOME/theos/sdks/
-          mkdir -p $HOME/theos/toolchain/linux/iphone/bin
-          for t in clang clang++ ld.lld lld; do ln -sf $(which $t) $HOME/theos/toolchain/linux/iphone/bin/$t; done
-          for t in lipo ar ranlib strip; do ln -sf /usr/bin/llvm-$t $HOME/theos/toolchain/linux/iphone/bin/$t; done
+          B=$HOME/theos/toolchain/linux/iphone/bin
+          mkdir -p $B
+          ln -sf $(which clang) $B/clang
+          ln -sf $(which clang++) $B/clang++
+          ln -sf $(which ld64.lld) $B/ld
+          ln -sf $(which ld64.lld) $B/ld64.lld
+          ln -sf /usr/bin/llvm-lipo $B/lipo || true
+          ln -sf /usr/bin/llvm-objcopy $B/objcopy || true
+          ln -sf /usr/bin/llvm-strip $B/strip || true
+          ln -sf /usr/bin/llvm-ar $B/ar || true
+          ln -sf /usr/bin/llvm-ranlib $B/ranlib || true
+          ls -la $B
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
       - name: Build
         run: |
-          export PATH=$THEOS/bin:$HOME/theos/toolchain/linux/iphone/bin:$PATH
+          export PATH=$HOME/theos/toolchain/linux/iphone/bin:$THEOS/bin:$PATH
           make
       - name: Collect
         run: |
