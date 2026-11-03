@@ -18,19 +18,19 @@ jobs:
           mkdir -p $HOME/theos/sdks && cp -r /tmp/sdks/iPhoneOS*.sdk $HOME/theos/sdks/
           mkdir -p $HOME/theos/toolchain/linux/iphone/bin
           for t in clang clang++ ld.lld lld; do ln -sf $(which $t) $HOME/theos/toolchain/linux/iphone/bin/$t; done
-          for t in lipo ar ranlib strip dsymutil; do ln -sf $(which llvm-$t 2>/dev/null || echo /usr/bin/llvm-$t) $HOME/theos/toolchain/linux/iphone/bin/$t; done
+          for t in lipo ar ranlib strip; do ln -sf /usr/bin/llvm-$t $HOME/theos/toolchain/linux/iphone/bin/$t; done
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
       - name: Build
         run: |
           export PATH=$THEOS/bin:$HOME/theos/toolchain/linux/iphone/bin:$PATH
-          make messages=yes 2>&1 | tail -40
+          make
       - name: Collect
         run: |
           mkdir -p out
-          find . -name '*.dylib' -not -path './.git/*' -exec cp {} out/ \; || true
-          ls -la out
+          find .theos -type f -name '*.dylib' -exec cp -v {} out/ \;
+          ls -la out || true
       - uses: actions/upload-artifact@v4
         with:
           name: theosgui-unlock
-          path: out/*.dylib
+          path: out/
           if-no-files-found: warn
