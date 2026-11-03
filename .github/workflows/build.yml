@@ -7,28 +7,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install toolchain
+      - name: Toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y make git curl xz-utils clang lld llvm
-      - name: Setup Theos
+      - name: Theos
         run: |
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
           git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
-          mkdir -p $HOME/theos/sdks
-          cp -r /tmp/sdks/iPhoneOS*.sdk $HOME/theos/sdks/
-          ls $HOME/theos/sdks
+          mkdir -p $HOME/theos/sdks && cp -r /tmp/sdks/iPhoneOS*.sdk $HOME/theos/sdks/
+          mkdir -p $HOME/theos/toolchain/linux/iphone/bin
+          for t in clang clang++ ld.lld lld; do ln -sf $(which $t) $HOME/theos/toolchain/linux/iphone/bin/$t; done
+          for t in lipo ar ranlib strip dsymutil; do ln -sf $(which llvm-$t 2>/dev/null || echo /usr/bin/llvm-$t) $HOME/theos/toolchain/linux/iphone/bin/$t; done
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
       - name: Build
         run: |
-          export PATH=$THEOS/bin:$PATH
-          make messages=yes
+          export PATH=$THEOS/bin:$HOME/theos/toolchain/linux/iphone/bin:$PATH
+          make messages=yes 2>&1 | tail -40
       - name: Collect
         run: |
           mkdir -p out
-          find .theos -name '*.dylib' -exec cp {} out/ \;
+          find . -name '*.dylib' -not -path './.git/*' -exec cp {} out/ \; || true
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
           name: theosgui-unlock
           path: out/*.dylib
+          if-no-files-found: warn
