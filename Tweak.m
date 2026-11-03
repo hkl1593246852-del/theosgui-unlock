@@ -2,57 +2,68 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
-#import <dlfcn.h>
 
-@interface NSObject (TGU)
-@end
+static const char *kKeys[] = {"Sponsor","sponsor","Activat","activat","Licen","licen",
+                              "Vip","VIP","Purchas","purchas","Premium","premium","Paid","paid","Unlock","unlock"};
 
-static NSString *tgu_notif_name(void) {
-    void *sym = dlsym(RTLD_DEFAULT, "kDeviceActivatedNotification");
-    if (sym) {
-        NSString *__unsafe_unretained *p = (NSString *__unsafe_unretained *)sym;
-        if (p && *p) return *p;
-    }
-    return @"kDeviceActivatedNotification";
+static BOOL nameMatches(const char *n) {
+    if (!n) return NO;
+    for (int i = 0; i < sizeof(kKeys)/sizeof(kKeys[0]); i++)
+        if (strstr(n, kKeys[i])) return YES;
+    return NO;
 }
 
-static void tgu_post(const char *why) {
-    NSString *name = tgu_notif_name();
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[NSNotificationCenter defaultCenter] postNotificationName:name object:nil];
-        NSLog(@"[TGU] posted %@ (%s)", name, why);
-    });
-}
-
-static IMP tgu_orig_vdl;
-static void tgu_vdl(id self, SEL _cmd) {
-    if (tgu_orig_vdl) ((void (*)(id, SEL))tgu_orig_vdl)(self, _cmd);
-    tgu_post("viewDidLoad");
-}
-
-static IMP tgu_orig_vda;
-static void tgu_vda(id self, SEL _cmd, BOOL animated) {
-    if (tgu_orig_vda) ((void (*)(id, SEL, BOOL))tgu_orig_vda)(self, _cmd, animated);
-    tgu_post("viewDidAppear");
-    SEL sel = NSSelectorFromString(@"handleDeviceActivated");
-    if ([self respondsToSelector:sel]) {
-        ((void (*)(id, SEL))objc_msgSend)(self, sel);
-        NSLog(@"[TGU] called handleDeviceActivated");
-    }
+static BOOL selLooksBoolGetter(const char *n) {
+    if (!n) return NO;
+    return (strncmp(n, "is", 2) == 0) || (strncmp(n, "has", 3) == 0) ||
+           (strncmp(n, "can", 3) == 0) || (strstr(n, "Enabled") != NULL);
 }
 
 __attribute__((constructor))
-static void tgu_init(void) {
-    NSLog(@"[TGU] loaded");
-    Class cls = objc_getClass("SponsorshipViewController");
-    if (cls) {
-        Method m1 = class_getInstanceMethod(cls, @selector(viewDidLoad));
-        if (m1) tgu_orig_vdl = method_setImplementation(m1, (IMP)tgu_vdl);
-        Method m2 = class_getInstanceMethod(cls, @selector(viewDidAppear:));
-        if (m2) tgu_orig_vda = method_setImplementation(m2, (IMP)tgu_vda);
-        NSLog(@"[TGU] hooked %@ (vdl=%p vda=%p)", cls, (void*)m1, (void*)m2);
-    } else {
-        NSLog(@"[TGU] class not found");
+static void tgu_probe(void) {
+    NSLog(@"[TGU] ==== probe start ====");
+    int n = objc_getClassList(NULL, 0);
+    Class *classes = (Class *)malloc(sizeof(Class) * n);
+    n = objc_getClassList(classes, n);
+
+    for (int i = 0; i < n; i++) {
+        const char *cn = class_getName(classes[i]);
+        if (!nameMatches(cn)) continue;
+        NSLog(@"[TGU] CLASS %s", cn);
+
+        unsigned int mc = 0;
+        Method *ms = class_copyMethodList(classes[i], &mc);
+        for (unsigned int k = 0; k < mc; k++) {
+            const char *sn = sel_getName(method_getName(ms[k]));
+            const char *te = method_getTypeEncoding(ms[k]);
+            NSLog(@"[TGU]   - %s  (%s)", sn, te);
+        }
+        free(ms);
+
+        Class meta = object_getClass(classes[i]);
+        unsigned int cmc = 0;
+        Method *cms = class_copyMethodList(meta, &cmc);
+        for (unsigned int k = 0; k < cmc; k++) {
+            const char *sn = sel_getName(method_getName(cms[k]));
+            NSLog(@"[TGU]   + %s", sn);
+        }
+        free(cms);
+
+        // 强制布尔 getter 返回 YES
+        ms = class_copyMethodList(classes[i], &mc);
+        for (unsigned int k = 0; k < mc; k++) {
+            const char *sn = sel_getName(method_getName(ms[k]));
+            const char *te = method_getTypeEncoding(ms[k]);
+            if (!selLooksBoolGetter(sn)) continue;
+            if (!te || (te[0] != 'c' && te[0] != 'B')) continue;
+            IMP imp = imp_implementationWithBlock(^BOOL(id self) {
+                NSLog(@"[TGU] force YES for %s", sn);
+                return YES;
+            });
+            method_setImplementation(ms[k], imp);
+        }
+        free(ms);
     }
-    tgu_post("ctor");
+    free(classes);
+    NSLog(@"[TGU] ==== probe end ====");
 }
