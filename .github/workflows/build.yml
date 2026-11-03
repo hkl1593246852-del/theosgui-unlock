@@ -7,25 +7,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld llvm git curl
-      - name: SDK
-        run: |
-          git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
-          ls /tmp/sdks | head
+      - run: sudo apt-get update && sudo apt-get install -y clang lld llvm git
+      - run: git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
       - name: Build
         run: |
           SDK=$(ls -d /tmp/sdks/iPhoneOS*.sdk | sort -V | tail -1)
-          echo "SDK=$SDK"
-          clang -target arm64-apple-ios14.0 -isysroot "$SDK" \
-            -fobjc-arc -O2 -dynamiclib -fuse-ld=lld \
-            -undefined dynamic_lookup \
+          clang -target arm64-apple-ios14.0 -isysroot "$SDK" -fobjc-arc -O1 \
+            -dynamiclib -fuse-ld=lld -undefined dynamic_lookup \
             -framework Foundation -framework UIKit \
             -install_name @executable_path/TheosGUIUnlock.dylib \
             -o TheosGUIUnlock.dylib Tweak.m
-          file TheosGUIUnlock.dylib || true
           ls -la TheosGUIUnlock.dylib
       - uses: actions/upload-artifact@v4
         with:
