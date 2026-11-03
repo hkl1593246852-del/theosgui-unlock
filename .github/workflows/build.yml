@@ -1,0 +1,31 @@
+name: build-dylib
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Theos
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make git curl xz-utils
+          git clone --recursive https://github.com/theos/theos.git $HOME/theos
+          git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
+          mkdir -p $HOME/theos/sdks
+          cp -r /tmp/sdks/iPhoneOS16.5.sdk $HOME/theos/sdks/ 2>/dev/null || cp -r /tmp/sdks/iPhoneOS*.sdk $HOME/theos/sdks/
+          echo "THEOS=$HOME/theos" >> $GITHUB_ENV
+      - name: Build
+        run: |
+          export PATH=$THEOS/bin:$PATH
+          make
+      - name: Collect
+        run: |
+          mkdir -p out
+          find . -name '*.dylib' -exec cp {} out/ \;
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: theosgui-unlock
+          path: out/*.dylib
